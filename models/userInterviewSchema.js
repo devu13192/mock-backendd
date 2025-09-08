@@ -7,7 +7,7 @@ const userInterviewSchema = mongoose.Schema({
   type:String,
   score:Number,
   feedback:String
-});
+},{ timestamps: true });
 
 
 const UserInterviewSchema = mongoose.model('UserInterviewSchema',userInterviewSchema)

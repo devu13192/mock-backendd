@@ -16,6 +16,33 @@ app.use("/interview", interviewRoutes)
 app.use("/user", userRoutes)
 app.use("/userInterview", userInterviewRoutes)
 
+// Health ping for frontend latency checks
+app.get('/ping', (req, res) => {
+    return res.status(204).send()
+})
+
+// Simple download test that streams N bytes
+app.get('/download-test', (req, res) => {
+    const sizeParam = parseInt(req.query.size, 10)
+    const size = Number.isFinite(sizeParam) && sizeParam > 0 ? sizeParam : (2 * 1024 * 1024)
+    res.setHeader('Content-Type', 'application/octet-stream')
+    res.setHeader('Content-Length', size)
+    // Stream chunks to avoid buffering huge memory
+    const chunkSize = 64 * 1024
+    let sent = 0
+    const interval = setInterval(() => {
+        if (sent >= size) {
+            clearInterval(interval)
+            return res.end()
+        }
+        const remaining = size - sent
+        const toSend = Math.min(chunkSize, remaining)
+        const buf = Buffer.allocUnsafe(toSend)
+        res.write(buf)
+        sent += toSend
+    }, 0)
+})
+
 // Endpoint to proxy OpenAI chat completions used by the user app
 app.post('/completions', async (req, res) => {
     try {
