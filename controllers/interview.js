@@ -1,5 +1,6 @@
 
 const InterviewSchema = require("../models/interviewSchema.js")
+const UserInterviewSchema = require("../models/userInterviewSchema.js")
 const mongoose = require("mongoose")
 
 
@@ -7,7 +8,55 @@ const mongoose = require("mongoose")
 exports.getInterviews = async (req,res) =>{
     
     const data = await InterviewSchema.find();
-    res.send(data)
+    
+    // Log existing types for debugging
+    const existingTypes = [...new Set(data.map(interview => interview.type).filter(Boolean))];
+    console.log('Existing interview types in database:', existingTypes);
+    
+    // Migrate existing interviews that don't have difficulty field
+    const interviewsToUpdate = data.filter(interview => !interview.difficulty);
+    if (interviewsToUpdate.length > 0) {
+        console.log(`Migrating ${interviewsToUpdate.length} interviews to add difficulty field`);
+        try {
+            await InterviewSchema.updateMany(
+                { difficulty: { $exists: false } },
+                { $set: { difficulty: 'Medium' } }
+            );
+            console.log('Difficulty migration completed successfully');
+        } catch (error) {
+            console.error('Difficulty migration failed:', error);
+        }
+    }
+    
+    // Automatic cleanup of orphaned user interviews (runs periodically)
+    try {
+        const existingInterviews = await InterviewSchema.find({}, 'company role');
+        const validCombinations = new Set();
+        existingInterviews.forEach(interview => {
+            validCombinations.add(`${interview.company}|${interview.role}`);
+        });
+        
+        const orphanedUserInterviews = await UserInterviewSchema.find({});
+        const toDelete = orphanedUserInterviews.filter(userInterview => {
+            const combination = `${userInterview.company}|${userInterview.role}`;
+            return !validCombinations.has(combination);
+        });
+        
+        if (toDelete.length > 0) {
+            console.log(`Auto-cleanup: Found ${toDelete.length} orphaned user interviews`);
+            const deletePromises = toDelete.map(userInterview => 
+                UserInterviewSchema.findByIdAndDelete(userInterview._id)
+            );
+            await Promise.all(deletePromises);
+            console.log(`Auto-cleanup: Removed ${toDelete.length} orphaned user interviews`);
+        }
+    } catch (error) {
+        console.error('Auto-cleanup error:', error);
+    }
+    
+    // Fetch updated data
+    const updatedData = await InterviewSchema.find();
+    res.send(updatedData)
 }
 exports.addInterview = async(req,res) =>{
     const interview = req.body
@@ -62,19 +111,131 @@ exports.updateInterview = async (req, res) => {
     }
 };
 
+// Helper function to cleanup orphaned user interviews
+const cleanupOrphanedUserInterviews = async (deletedInterview) => {
+    try {
+        // Find and delete user interviews that match the deleted interview's company and role
+        const result = await UserInterviewSchema.deleteMany({
+            company: deletedInterview.company,
+            role: deletedInterview.role
+        });
+        
+        if (result.deletedCount > 0) {
+            console.log(`Cleaned up ${result.deletedCount} orphaned user interviews for ${deletedInterview.company} - ${deletedInterview.role}`);
+        }
+        
+        return result.deletedCount;
+    } catch (error) {
+        console.error('Error cleaning up orphaned user interviews:', error);
+        return 0;
+    }
+};
+
 exports.deleteInterview = async (req, res) => {
     const id = req.params.id;
     
     try {
-        const deletedInterview = await InterviewSchema.findByIdAndDelete(id);
+        // First, get the interview details before deleting
+        const interviewToDelete = await InterviewSchema.findById(id);
         
-        if (!deletedInterview) {
+        if (!interviewToDelete) {
             return res.status(404).json({ message: "Interview not found" });
         }
         
-        res.status(200).json({ message: "Interview deleted successfully" });
+        // Delete the interview
+        const deletedInterview = await InterviewSchema.findByIdAndDelete(id);
+        
+        // Cleanup orphaned user interviews
+        const cleanedCount = await cleanupOrphanedUserInterviews(deletedInterview);
+        
+        res.status(200).json({ 
+            message: "Interview deleted successfully",
+            cleanedUserInterviews: cleanedCount
+        });
     } catch (error) {
         res.status(400).json({ message: error.message });
+    }
+};
+
+// Function to cleanup all orphaned user interviews
+exports.cleanupAllOrphanedUserInterviews = async (req, res) => {
+    try {
+        console.log('Starting comprehensive cleanup of orphaned user interviews...');
+        
+        // Get all existing interviews
+        const existingInterviews = await InterviewSchema.find({}, 'company role');
+        
+        // Create multiple sets for different matching strategies
+        const validCombinations = new Set();
+        const validCombinationsLower = new Set();
+        const validCombinationsTrimmed = new Set();
+        
+        existingInterviews.forEach(interview => {
+            const combination = `${interview.company}|${interview.role}`;
+            const combinationLower = `${interview.company.toLowerCase()}|${interview.role.toLowerCase()}`;
+            const combinationTrimmed = `${interview.company.trim()}|${interview.role.trim()}`;
+            
+            validCombinations.add(combination);
+            validCombinationsLower.add(combinationLower);
+            validCombinationsTrimmed.add(combinationTrimmed);
+        });
+        
+        // Get all user interviews
+        const allUserInterviews = await UserInterviewSchema.find({});
+        
+        // Find orphaned user interviews using multiple matching strategies
+        const orphanedUserInterviews = allUserInterviews.filter(userInterview => {
+            const combination = `${userInterview.company}|${userInterview.role}`;
+            const combinationLower = `${userInterview.company.toLowerCase()}|${userInterview.role.toLowerCase()}`;
+            const combinationTrimmed = `${userInterview.company.trim()}|${userInterview.role.trim()}`;
+            
+            // Check all matching strategies
+            return !validCombinations.has(combination) && 
+                   !validCombinationsLower.has(combinationLower) && 
+                   !validCombinationsTrimmed.has(combinationTrimmed);
+        });
+        
+        console.log(`Found ${orphanedUserInterviews.length} orphaned user interviews out of ${allUserInterviews.length} total`);
+        
+        if (orphanedUserInterviews.length === 0) {
+            return res.status(200).json({ 
+                message: "No orphaned user interviews found",
+                cleanedCount: 0,
+                totalUserInterviews: allUserInterviews.length,
+                totalInterviews: existingInterviews.length
+            });
+        }
+        
+        // Log orphaned interviews before deletion
+        console.log('Orphaned interviews to be deleted:');
+        orphanedUserInterviews.forEach(orphaned => {
+            console.log(`  - ${orphaned.company} - ${orphaned.role} (User: ${orphaned.uid})`);
+        });
+        
+        // Delete orphaned user interviews
+        const deletePromises = orphanedUserInterviews.map(userInterview => 
+            UserInterviewSchema.findByIdAndDelete(userInterview._id)
+        );
+        
+        await Promise.all(deletePromises);
+        
+        console.log(`Successfully cleaned up ${orphanedUserInterviews.length} orphaned user interviews`);
+        
+        res.status(200).json({ 
+            message: `Successfully cleaned up ${orphanedUserInterviews.length} orphaned user interviews`,
+            cleanedCount: orphanedUserInterviews.length,
+            totalUserInterviews: allUserInterviews.length,
+            totalInterviews: existingInterviews.length,
+            orphanedInterviews: orphanedUserInterviews.map(ui => ({
+                company: ui.company,
+                role: ui.role,
+                uid: ui.uid
+            }))
+        });
+        
+    } catch (error) {
+        console.error('Error during cleanup:', error);
+        res.status(500).json({ message: "Error during cleanup", error: error.message });
     }
 };
 

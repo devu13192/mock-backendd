@@ -5,6 +5,11 @@ const interviewSchema = mongoose.Schema({
   role:String,
   questions:Array,
   type:String,
+  difficulty:{
+    type:String,
+    enum:['Easy', 'Medium', 'Hard'],
+    default:'Medium'
+  },
   count:{
     type:Number,
     default:0

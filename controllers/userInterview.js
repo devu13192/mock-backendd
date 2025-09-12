@@ -15,6 +15,17 @@ exports.getInterviewsByUserId = async (req,res) =>{
       });
 }
 
+// Get all user interviews (for cleanup purposes)
+exports.getAllUserInterviews = async (req, res) => {
+    try {
+        const data = await UserInterviewSchema.find({});
+        res.json(data);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'An error occurred' });
+    }
+}
+
 exports.addUserInterview = async(req,res) =>{
     const interview = req.body
     const newInterview= new UserInterviewSchema(interview)

@@ -2,6 +2,7 @@
 const UserSchema = require("../models/userSchema.js")
 const mongoose = require("mongoose")
 const nodemailer = require('nodemailer')
+const cloudinary = require('cloudinary').v2
 
 // Email configuration with fallback values
 console.log('📧 Email system initialized with fallback credentials')
@@ -12,6 +13,12 @@ const transporter = nodemailer.createTransport({
         user: process.env.SMTP_USER || 'kudevupriya@gmail.com',
         pass: process.env.SMTP_PASS || 'skobhmavhafnstnz'
     }
+})
+// Cloudinary configuration
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dbocasupv',
+    api_key: process.env.CLOUDINARY_API_KEY || '829761961339449',
+    api_secret: process.env.CLOUDINARY_API_SECRET || '8n-9K4Oi2osFx8RK4eh_q_RYYlQ'
 })
 
 async function sendLoginEmail({ toEmail, isNew, userName = '' }){
@@ -469,6 +476,52 @@ exports.updateScore= async (req,res) =>{
     }).catch((err)=>{
         res.send(err)
     });
+}
+
+// Update user's profile photo URL (accepts direct URL or Cloudinary upload via multer)
+exports.setPhotoURL = async (req, res) => {
+    const id = req.params.id
+    const { photoURL } = req.body || {}
+    try{
+        let finalUrl = photoURL || ''
+
+        // If a file is attached (via multer), upload buffer to Cloudinary
+        if (req.file && req.file.buffer) {
+            const buffer = req.file.buffer
+            const folder = `avatars/${id}`
+            const uploadPromise = () => new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { folder, resource_type: 'image' },
+                    (error, result) => {
+                        if (error) return reject(error)
+                        return resolve(result)
+                    }
+                )
+                stream.end(buffer)
+            })
+            const result = await uploadPromise()
+            finalUrl = result?.secure_url || result?.url || ''
+        }
+
+        const updated = await UserSchema.findOneAndUpdate(
+            { id },
+            { $set: { photoURL: finalUrl || '' } },
+            { new: true }
+        )
+        if(!updated){
+            return res.status(404).json({ message: 'User not found' })
+        }
+        // Ensure active flags in response for consistency
+        const responseData = {
+            ...updated.toObject(),
+            active: updated.active !== false,
+            deactivated: updated.active === false
+        }
+        return res.json({ ...responseData, photoURL: updated.photoURL })
+    }catch(err){
+        console.error('Cloudinary upload/update error:', err)
+        return res.status(500).json({ message: 'Failed to update photoURL' })
+    }
 }
 
 exports.setActive = async (req, res) => {

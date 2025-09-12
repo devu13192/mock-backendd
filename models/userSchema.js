@@ -6,6 +6,10 @@ const userSchema = mongoose.Schema({
         type:String,
         default:''
     },
+    photoURL:{
+        type:String,
+        default:''
+    },
     score:{
         type:Number,
         default:0

@@ -5,6 +5,7 @@ var mongoose = require('mongoose')
 const interviewRoutes = require("./routes/interview.js")
 const userRoutes = require("./routes/users.js")
 const userInterviewRoutes = require("./routes/userInterview.js")
+const contactRoutes = require("./routes/contact.js")
 
 const app = express()
 const cors = require("cors")
@@ -15,6 +16,7 @@ app.use(bodyParser.json())
 app.use("/interview", interviewRoutes)
 app.use("/user", userRoutes)
 app.use("/userInterview", userInterviewRoutes)
+app.use("/api/contacts", contactRoutes)
 
 // Health ping for frontend latency checks
 app.get('/ping', (req, res) => {
