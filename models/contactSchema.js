@@ -33,8 +33,21 @@ const contactSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['new', 'contacted'],
+    enum: ['new', 'in_progress', 'contacted'],
     default: 'new'
+  },
+  lastEmailAt: {
+    type: Date
+  },
+  lastReplySubject: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+  lastReplyBody: {
+    type: String,
+    trim: true,
+    maxlength: 5000
   },
   consent: {
     type: Boolean,

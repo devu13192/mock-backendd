@@ -4,7 +4,10 @@ const {
   createContact,
   getAllContacts,
   updateContactStatus,
-  getContactStats
+  getContactStats,
+  replyToContact,
+  deleteContact,
+  bulkDeleteContacts
 } = require('../controllers/contact');
 
 // Public routes
@@ -14,6 +17,9 @@ router.post('/', createContact);
 router.get('/', getAllContacts);
 router.get('/stats', getContactStats);
 router.patch('/:id/status', updateContactStatus);
+router.post('/:id/reply', replyToContact);
+router.delete('/:id', deleteContact);
+router.post('/bulk/delete', bulkDeleteContacts);
 
 module.exports = router;
 
