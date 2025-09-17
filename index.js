@@ -6,6 +6,7 @@ const interviewRoutes = require("./routes/interview.js")
 const userRoutes = require("./routes/users.js")
 const userInterviewRoutes = require("./routes/userInterview.js")
 const contactRoutes = require("./routes/contact.js")
+const mentorRoutes = require("./routes/mentor.js")
 
 const app = express()
 const cors = require("cors")
@@ -17,6 +18,7 @@ app.use("/interview", interviewRoutes)
 app.use("/user", userRoutes)
 app.use("/userInterview", userInterviewRoutes)
 app.use("/api/contacts", contactRoutes)
+app.use("/mentor", mentorRoutes)
 
 // Health ping for frontend latency checks
 app.get('/ping', (req, res) => {
