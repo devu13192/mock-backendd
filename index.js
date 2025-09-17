@@ -7,6 +7,7 @@ const userRoutes = require("./routes/users.js")
 const userInterviewRoutes = require("./routes/userInterview.js")
 const contactRoutes = require("./routes/contact.js")
 const mentorRoutes = require("./routes/mentor.js")
+const adRoutes = require("./routes/ad.js")
 
 const app = express()
 const cors = require("cors")
@@ -19,6 +20,7 @@ app.use("/user", userRoutes)
 app.use("/userInterview", userInterviewRoutes)
 app.use("/api/contacts", contactRoutes)
 app.use("/mentor", mentorRoutes)
+app.use("/ads", adRoutes)
 
 // Health ping for frontend latency checks
 app.get('/ping', (req, res) => {
@@ -96,14 +98,25 @@ app.get("/",(req,res)=>{
 
 
 
-var port = process.env.PORT || 5000
+var port = parseInt(process.env.PORT, 10) || 5000
+
+function startExpress(desiredPort, attempt = 0){
+    const server = app.listen(desiredPort, () => {
+        console.log('Server listening on port', desiredPort)
+    })
+    server.on('error', (err) => {
+        if (err && err.code === 'EADDRINUSE' && attempt < 5){
+            const nextPort = desiredPort + 1
+            console.warn(`Port ${desiredPort} in use. Trying ${nextPort}...`)
+            startExpress(nextPort, attempt + 1)
+        } else {
+            throw err
+        }
+    })
+}
 
 mongoose.connect("mongodb+srv://devupriya:devupriya@cluster0.bxhdiuc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
     { useNewUrlParser: true, useUnifiedTopology: true }).then(()=>{
-        app.listen(port, err => {
-            if (err)
-                throw err
-            console.log('Server listening on port', port)
-        })
+        startExpress(port)
     });
 
