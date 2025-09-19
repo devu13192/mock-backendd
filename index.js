@@ -8,6 +8,7 @@ const userInterviewRoutes = require("./routes/userInterview.js")
 const contactRoutes = require("./routes/contact.js")
 const mentorRoutes = require("./routes/mentor.js")
 const adRoutes = require("./routes/ad.js")
+const chatRoutes = require("./routes/chat.js")
 
 const app = express()
 const cors = require("cors")
@@ -21,6 +22,7 @@ app.use("/userInterview", userInterviewRoutes)
 app.use("/api/contacts", contactRoutes)
 app.use("/mentor", mentorRoutes)
 app.use("/ads", adRoutes)
+app.use("/chat", chatRoutes)
 
 // Health ping for frontend latency checks
 app.get('/ping', (req, res) => {
@@ -99,10 +101,49 @@ app.get("/",(req,res)=>{
 
 
 var port = parseInt(process.env.PORT, 10) || 5000
+let io = null
 
 function startExpress(desiredPort, attempt = 0){
     const server = app.listen(desiredPort, () => {
         console.log('Server listening on port', desiredPort)
+    })
+
+    // Initialize Socket.IO on the same HTTP server
+    const { Server } = require('socket.io')
+    io = new Server(server, {
+        cors: { origin: '*', methods: ['GET','POST'] }
+    })
+    app.set('io', io)
+
+    const Message = require('./models/messageSchema')
+    io.on('connection', (socket) => {
+        socket.on('join', ({ roomId, userEmail }) => {
+            if (!roomId) return
+            socket.join(roomId)
+            socket.data = { roomId, userEmail }
+            socket.emit('joined', { roomId })
+        })
+
+        socket.on('message', async (payload) => {
+            try {
+                const { roomId, content, senderEmail, recipientEmail } = payload || {}
+                if (!roomId || !content || !senderEmail || !recipientEmail) return
+                const doc = await Message.create({ roomId, content, senderEmail, recipientEmail, readByMentor: false })
+                io.to(roomId).emit('message', doc)
+                // Notify mentor channel if recipient is mentor
+                if (recipientEmail) {
+                    const email = String(recipientEmail).toLowerCase()
+                    io.to(`mentor:${email}`).emit('notify', { roomId, lastContent: content, createdAt: doc.createdAt, from: senderEmail })
+                }
+            } catch (e) {
+                console.error('Socket message error', e)
+            }
+        })
+
+        socket.on('typing', ({ roomId, userEmail, typing }) => {
+            if (!roomId) return
+            socket.to(roomId).emit('typing', { userEmail, typing: !!typing })
+        })
     })
     server.on('error', (err) => {
         if (err && err.code === 'EADDRINUSE' && attempt < 5){
