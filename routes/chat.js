@@ -2,6 +2,43 @@ const express = require('express')
 const router = express.Router()
 const Message = require('../models/messageSchema')
 const { default: mongoose } = require('mongoose')
+const multer = require('multer')
+const path = require('path')
+const fs = require('fs')
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+	destination: (req, file, cb) => {
+		const uploadDir = 'uploads/chat-files'
+		if (!fs.existsSync(uploadDir)) {
+			fs.mkdirSync(uploadDir, { recursive: true })
+		}
+		cb(null, uploadDir)
+	},
+	filename: (req, file, cb) => {
+		const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+		cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+	}
+})
+
+const upload = multer({
+	storage: storage,
+	limits: {
+		fileSize: 10 * 1024 * 1024 // 10MB limit
+	},
+	fileFilter: (req, file, cb) => {
+		// Allow images, audio, PDF, and text files
+		const allowedTypes = /jpeg|jpg|png|gif|webp|mp3|wav|ogg|m4a|webm|pdf|doc|docx|txt/
+		const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase())
+		const mimetype = allowedTypes.test(file.mimetype) || file.mimetype === 'audio/webm'
+		
+		if (mimetype && extname) {
+			return cb(null, true)
+		} else {
+			cb(new Error('File type not supported'))
+		}
+	}
+})
 
 // Get recent messages for a roomId (mentor is single, room can be mentor or user-mentor)
 router.get('/history/:roomId', async (req, res) => {
@@ -97,6 +134,72 @@ router.post('/read', async (req, res) => {
 	} catch (e) {
 		console.error('Mark read error', e)
 		return res.status(500).send('Failed to mark read')
+	}
+})
+
+// Upload file for chat
+router.post('/upload', upload.single('file'), async (req, res) => {
+	try {
+		const io = req.app.get('io')
+		const { roomId, senderEmail, recipientEmail } = req.body || {}
+		
+		if (!req.file) {
+			return res.status(400).send('No file uploaded')
+		}
+		
+		if (!roomId || !senderEmail || !recipientEmail) {
+			// Clean up uploaded file if validation fails
+			fs.unlinkSync(req.file.path)
+			return res.status(400).send('Missing required fields')
+		}
+		
+		// Create file URL (adjust based on your server setup)
+		const fileUrl = `/uploads/chat-files/${req.file.filename}`
+		
+		// Create message with file info
+		const messageData = {
+			roomId,
+			content: `📎 ${req.file.originalname}`,
+			senderEmail,
+			recipientEmail,
+			fileInfo: {
+				fileName: req.file.originalname,
+				fileSize: req.file.size,
+				fileType: req.file.mimetype,
+				fileUrl: fileUrl,
+				fileId: req.file.filename
+			}
+		}
+		
+		const doc = await Message.create(messageData)
+		
+		// Emit to room
+		if (io) {
+			io.to(roomId).emit('message', doc)
+			// Notify recipient
+			if (recipientEmail) {
+				const email = String(recipientEmail).toLowerCase()
+				io.to(`mentor:${email}`).emit('notify', { 
+					roomId, 
+					lastContent: `📎 ${req.file.originalname}`, 
+					createdAt: doc.createdAt, 
+					from: senderEmail 
+				})
+			}
+		}
+		
+		return res.json({
+			messageId: doc._id,
+			fileUrl: fileUrl,
+			fileId: req.file.filename
+		})
+	} catch (e) {
+		console.error('File upload error', e)
+		// Clean up uploaded file on error
+		if (req.file && fs.existsSync(req.file.path)) {
+			fs.unlinkSync(req.file.path)
+		}
+		return res.status(500).send('Failed to upload file')
 	}
 })
 

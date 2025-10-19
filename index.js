@@ -16,6 +16,9 @@ app.use(cors())
 require('dotenv/config');
 app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
+
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'))
 app.use("/interview", interviewRoutes)
 app.use("/user", userRoutes)
 app.use("/userInterview", userInterviewRoutes)
