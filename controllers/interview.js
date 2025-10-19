@@ -58,16 +58,229 @@ exports.getInterviews = async (req,res) =>{
     const updatedData = await InterviewSchema.find();
     res.send(updatedData)
 }
-exports.addInterview = async(req,res) =>{
-    const interview = req.body
-    const newInterview= new InterviewSchema(interview)
-    try {
-        newInterview.save()
-        res.status(201).json(newInterview);
-    } catch (error) {
-        res.status(409).json({ message: error.message });
-    }
+// Server-side validation functions
+const isValidCompany = (company) => {
+  const trimmed = company.trim();
+  
+  if (trimmed.length < 2 || trimmed.length > 100) return false;
+  
+  // Check for repeated characters (more than 3 consecutive)
+  if (/(.)\1{3,}/.test(trimmed)) return false;
+  
+  // Check for keyboard patterns
+  const keyboardPatterns = [
+    'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'poiuytrewq', 'lkjhgfdsa', 'mnbvcxz',
+    'qwerty', 'asdf', 'zxcv', 'qazwsx', '1q2w3e', '1234567890', '0987654321',
+    'dfghjklkjhg', 'sdfghjklkjhgfdsdfghjkjhgfddfghjhg', 'wertyuioiuytreert',
+    'rtyuigkjbnmn', 'qwertyuiopasdfghjklzxcvbnm'
+  ];
+  
+  const lower = trimmed.toLowerCase();
+  if (keyboardPatterns.some(pattern => lower.includes(pattern))) return false;
+  
+  // Company names should contain letters and basic punctuation only
+  if (!/^[a-zA-Z0-9\s&.,'-]+$/.test(trimmed)) return false;
+  
+  // Must have at least one meaningful word
+  const words = trimmed.split(/\s+/).filter(word => word.length >= 2);
+  if (words.length < 1) return false;
+  
+  return true;
+};
 
+const isValidRole = (role) => {
+  const trimmed = role.trim();
+  
+  if (trimmed.length < 2 || trimmed.length > 100) return false;
+  
+  // Check for repeated characters (more than 3 consecutive)
+  if (/(.)\1{3,}/.test(trimmed)) return false;
+  
+  // Check for keyboard patterns
+  const keyboardPatterns = [
+    'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'poiuytrewq', 'lkjhgfdsa', 'mnbvcxz',
+    'qwerty', 'asdf', 'zxcv', 'qazwsx', '1q2w3e', '1234567890', '0987654321',
+    'dfghjklkjhg', 'sdfghjklkjhgfdsdfghjkjhgfddfghjhg', 'wertyuioiuytreert',
+    'rtyuigkjbnmn', 'qwertyuiopasdfghjklzxcvbnm'
+  ];
+  
+  const lower = trimmed.toLowerCase();
+  if (keyboardPatterns.some(pattern => lower.includes(pattern))) return false;
+  
+  // Role names should contain letters, numbers, spaces, and basic punctuation
+  if (!/^[a-zA-Z0-9\s&.,'-/]+$/.test(trimmed)) return false;
+  
+  // Must have at least one meaningful word
+  const words = trimmed.split(/\s+/).filter(word => word.length >= 2);
+  if (words.length < 1) return false;
+  
+  return true;
+};
+
+const isValidQuestion = (question) => {
+  const trimmed = question.trim();
+  
+  if (trimmed.length < 15 || trimmed.length > 500) return false;
+  
+  // Check for repeated characters (more than 3 consecutive)
+  if (/(.)\1{3,}/.test(trimmed)) return false;
+  
+  // Questions should end with question mark
+  if (!trimmed.endsWith('?')) return false;
+  
+  // Check for keyboard patterns
+  const keyboardPatterns = [
+    'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'poiuytrewq', 'lkjhgfdsa', 'mnbvcxz',
+    'qwerty', 'asdf', 'zxcv', 'qazwsx', '1q2w3e', '1234567890', '0987654321',
+    'dfghjklkjhg', 'sdfghjklkjhgfdsdfghjkjhgfddfghjhg', 'wertyuioiuytreert',
+    'rtyuigkjbnmn', 'qwertyuiopasdfghjklzxcvbnm'
+  ];
+  
+  const lower = trimmed.toLowerCase();
+  if (keyboardPatterns.some(pattern => lower.includes(pattern))) return false;
+  
+  // Must have meaningful words
+  const words = trimmed.split(/\s+/).filter(word => word.length >= 2);
+  if (words.length < 3) return false;
+  
+  // Check for excessive word repetition
+  const wordCounts = {};
+  words.forEach(word => {
+    wordCounts[word.toLowerCase()] = (wordCounts[word.toLowerCase()] || 0) + 1;
+  });
+  const maxWordRepetition = Math.max(...Object.values(wordCounts));
+  if (maxWordRepetition > Math.ceil(words.length / 2)) return false;
+  
+  return true;
+};
+
+const isValidAnswer = (answer) => {
+  const trimmed = answer.trim();
+  
+  if (trimmed.length < 3 || trimmed.length > 1000) return false;
+  
+  // Check for repeated characters (more than 3 consecutive)
+  if (/(.)\1{3,}/.test(trimmed)) return false;
+  
+  // Check for keyboard patterns
+  const keyboardPatterns = [
+    'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'poiuytrewq', 'lkjhgfdsa', 'mnbvcxz',
+    'qwerty', 'asdf', 'zxcv', 'qazwsx', '1q2w3e', '1234567890', '0987654321',
+    'dfghjklkjhg', 'sdfghjklkjhgfdsdfghjkjhgfddfghjhg', 'wertyuioiuytreert',
+    'rtyuigkjbnmn', 'qwertyuiopasdfghjklzxcvbnm'
+  ];
+  
+  const lower = trimmed.toLowerCase();
+  if (keyboardPatterns.some(pattern => lower.includes(pattern))) return false;
+  
+  // Must have meaningful words
+  const words = trimmed.split(/\s+/).filter(word => word.length >= 2);
+  if (words.length < 1) return false;
+  
+  // Check for excessive word repetition
+  const wordCounts = {};
+  words.forEach(word => {
+    wordCounts[word.toLowerCase()] = (wordCounts[word.toLowerCase()] || 0) + 1;
+  });
+  const maxWordRepetition = Math.max(...Object.values(wordCounts));
+  if (maxWordRepetition > Math.ceil(words.length / 2)) return false;
+  
+  return true;
+};
+
+exports.addInterview = async(req,res) =>{
+    const interview = req.body;
+    
+    // Server-side validation
+    if (!interview.company || !interview.role || !interview.questions || !Array.isArray(interview.questions)) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'Missing required fields: company, role, and questions are required' 
+        });
+    }
+    
+    // Validate company
+    if (!isValidCompany(interview.company)) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'Please enter a valid company name (avoid keyboard patterns, repeated characters, or gibberish)' 
+        });
+    }
+    
+    // Validate role
+    if (!isValidRole(interview.role)) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'Please enter a valid role (avoid keyboard patterns, repeated characters, or gibberish)' 
+        });
+    }
+    
+    // Validate questions
+    if (interview.questions.length < 10) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'Minimum 10 questions required' 
+        });
+    }
+    
+    if (interview.questions.length > 50) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'Maximum 50 questions allowed' 
+        });
+    }
+    
+    // Validate each question and answer
+    for (let i = 0; i < interview.questions.length; i++) {
+        const q = interview.questions[i];
+        
+        if (!q.question || !q.answer) {
+            return res.status(400).json({ 
+                success: false,
+                message: `Question ${i + 1}: Both question and answer are required` 
+            });
+        }
+        
+        if (!isValidQuestion(q.question)) {
+            return res.status(400).json({ 
+                success: false,
+                message: `Question ${i + 1}: Please enter a meaningful question (avoid keyboard patterns, repeated characters, or gibberish)` 
+            });
+        }
+        
+        if (!isValidAnswer(q.answer)) {
+            return res.status(400).json({ 
+                success: false,
+                message: `Answer ${i + 1}: Enter a meaningful answer (avoid keyboard patterns, repeated characters, or gibberish)` 
+            });
+        }
+    }
+    
+    // Check for duplicate questions
+    const questionTexts = interview.questions.map(q => q.question.toLowerCase().trim());
+    const duplicates = questionTexts.filter((text, index) => questionTexts.indexOf(text) !== index);
+    if (duplicates.length > 0) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'Duplicate questions are not allowed' 
+        });
+    }
+    
+    const newInterview = new InterviewSchema(interview);
+    try {
+        await newInterview.save();
+        res.status(201).json({
+            success: true,
+            message: 'Interview created successfully',
+            data: newInterview
+        });
+    } catch (error) {
+        res.status(409).json({ 
+            success: false,
+            message: 'Failed to create interview',
+            error: error.message 
+        });
+    }
 }
 
 exports.getInterviewById= async (req,res) =>{

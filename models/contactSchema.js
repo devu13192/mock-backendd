@@ -17,7 +17,7 @@ const contactSchema = new mongoose.Schema({
   phone: {
     type: String,
     trim: true,
-    maxlength: 20
+    maxlength: 10
   },
   inquiryType: {
     type: String,
@@ -29,7 +29,8 @@ const contactSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    maxlength: 1000
+    maxlength: 2000,
+    minlength: 20
   },
   status: {
     type: String,
