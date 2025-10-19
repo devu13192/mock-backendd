@@ -11,12 +11,12 @@ const mailTransporter = nodemailer.createTransport({
   }
 });
 
-// Server-side validation functions
+// Enhanced server-side validation functions
 const isValidEmail = (email) => {
   const trimmed = email.trim().toLowerCase();
   
   // Basic format check with comprehensive regex
-  const emailRegex = /^(?:[a-zA-Z0-9_'^&\/+-])+(?:\.(?:[a-zA-Z0-9_'^&\/+-]+))*@(?:(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})$/;
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(trimmed)) return false;
   
   // Check for minimum length
@@ -36,62 +36,38 @@ const isValidEmail = (email) => {
   if (localPart.startsWith('.') || localPart.endsWith('.')) return false;
   if (localPart.includes('..')) return false; // No consecutive dots
   
-  // Check for invalid characters in local part
-  if (!/^[a-zA-Z0-9._'^&\/+-]+$/.test(localPart)) return false;
-  
   // Domain part validation
   if (domainPart.length < 4 || domainPart.length > 253) return false; // Must have at least x.y.z format
   if (domainPart.startsWith('.') || domainPart.endsWith('.')) return false;
   if (domainPart.includes('..')) return false; // No consecutive dots
   
-  // Check domain has valid TLD
-  const domainParts = domainPart.split('.');
-  if (domainParts.length < 2) return false; // Must have at least domain.tld
+  // Enhanced spam detection
+  // Check for excessive repetition in local part
+  if (localPart.length > 10) {
+    const charCounts = {};
+    for (let char of localPart.toLowerCase()) {
+      charCounts[char] = (charCounts[char] || 0) + 1;
+    }
+    const maxCount = Math.max(...Object.values(charCounts));
+    if (maxCount > localPart.length * 0.5) return false;
+  }
   
-  // Check TLD length (2-63 characters)
-  const tld = domainParts[domainParts.length - 1];
-  if (tld.length < 2 || tld.length > 63) return false;
+  // Check for numeric repetition (like 454444444444444444444444444444444)
+  if (/\d{10,}/.test(localPart)) return false;
   
-  // Check TLD contains only letters
-  if (!/^[a-zA-Z]+$/.test(tld)) return false;
-  
-  // Check for common invalid patterns
-  const invalidPatterns = [
-    /^[0-9]+@/, // Email starting with only numbers
-    /@[0-9]+$/, // Email ending with only numbers
-    /^[^a-zA-Z]/, // Email starting with non-letter
-    /@[^a-zA-Z0-9]/, // Domain starting with invalid character
-    /\.{2,}/, // Multiple consecutive dots
-    /^\.|\.$/, // Starting or ending with dot
-    /@\.|\.@/, // Dot immediately before or after @
-  ];
-  
-  if (invalidPatterns.some(pattern => pattern.test(trimmed))) return false;
-  
-  // Check for keyboard patterns in local part (common gibberish patterns)
-  // More specific patterns to avoid false positives with legitimate names
+  // Check for keyboard patterns in local part
   const keyboardPatterns = [
-    /^[qwertyuiop]{4,}$/i, // Entire local part is qwerty row
-    /^[asdfghjkl]{4,}$/i, // Entire local part is asdf row
-    /^[zxcvbnm]{4,}$/i, // Entire local part is zxcv row
-    /[qwertyuiop]{6,}/i, // 6+ consecutive qwerty row characters
-    /[asdfghjkl]{6,}/i, // 6+ consecutive asdf row characters
-    /[zxcvbnm]{6,}/i, // 6+ consecutive zxcv row characters
-    /[1234567890]{6,}/, // 6+ consecutive numbers
-    /[qwertyuiopasdfghjklzxcvbnm]{12,}/i, // 12+ consecutive keyboard characters
+    /^[qwertyuiop]+$/i,
+    /^[asdfghjkl]+$/i,
+    /^[zxcvbnm]+$/i,
+    /^[abcdefghijklmnopqrstuvwxyz]+$/i
   ];
   
   if (keyboardPatterns.some(pattern => pattern.test(localPart))) return false;
   
-  // Check for suspicious patterns (potential spam/gibberish)
-  const suspiciousPatterns = [
-    /[a-z]{15,}/, // More than 15 consecutive lowercase letters
-    /[A-Z]{15,}/, // More than 15 consecutive uppercase letters
-    /[0-9]{10,}/, // More than 10 consecutive numbers
-    /[a-zA-Z]{20,}/, // More than 20 consecutive letters
-  ];
-  
-  if (suspiciousPatterns.some(pattern => pattern.test(trimmed))) return false;
+  // Check for common spam domains
+  const spamDomains = ['tempmail.com', '10minutemail.com', 'guerrillamail.com'];
+  if (spamDomains.some(domain => domainPart.includes(domain))) return false;
   
   return true;
 };
@@ -102,40 +78,52 @@ const isValidName = (name) => {
   // Check for minimum length
   if (trimmed.length < 3) return false;
   
-  // Check for repeated characters (more than 2 consecutive same characters)
-  if (/(.)\1{2,}/.test(trimmed)) return false;
+  // Check for maximum length
+  if (trimmed.length > 50) return false;
   
-  // Check for keyboard patterns (common gibberish patterns) - more strict for names
+  // Check for alphabets and spaces only
+  if (!/^[a-zA-Z\s]+$/.test(trimmed)) return false;
+  
+  // Check for minimum two words (first and last name)
+  const words = trimmed.split(/\s+/).filter(word => word.length > 0);
+  if (words.length < 2) return false;
+  
+  // Check for meaningful names (reject single letters or very short words)
+  const hasValidWords = words.every(word => word.length >= 2);
+  if (!hasValidWords) return false;
+  
+  // Enhanced keyboard pattern detection
   const keyboardPatterns = [
-    /[qwertyuiop]{4,}/i,
-    /[asdfghjkl]{4,}/i,
-    /[zxcvbnm]{4,}/i,
-    /[qwerty]{4,}/i,
-    /[asdf]{4,}/i,
-    /[zxcv]{4,}/i,
-    /[1234567890]{3,}/,
-    /[abcdefghijklmnopqrstuvwxyz]{8,}/i,
-    /[qwertyuiopasdfghjklzxcvbnm]{10,}/i
+    /^[qwertyuiop]+$/i,
+    /^[asdfghjkl]+$/i,
+    /^[zxcvbnm]+$/i,
+    /^[abcdefghijklmnopqrstuvwxyz]+$/i,
+    /^(.)\1+$/i, // repeated characters
+    /^[lkjhgfdsa]+$/i, // reverse keyboard patterns
+    /^[poiuytrewq]+$/i,
+    /^[mnbvcxz]+$/i
   ];
   
   if (keyboardPatterns.some(pattern => pattern.test(trimmed))) return false;
   
-  // Check for excessive special characters or symbols
-  const specialCharCount = (trimmed.match(/[^a-zA-Z\s'.-]/g) || []).length;
-  if (specialCharCount > 0) return false; // Names should only have letters, spaces, apostrophes, dots, and hyphens
+  // Check for all uppercase junk text
+  if (trimmed === trimmed.toUpperCase() && trimmed.length > 3) return false;
   
-  // Check for meaningful word patterns (at least 1 word with 2+ characters)
-  const words = trimmed.split(/\s+/).filter(word => word.length >= 2);
-  if (words.length < 1) return false;
-  
-  // Check for excessive repetition of same word
-  const wordCounts = {};
-  words.forEach(word => {
-    wordCounts[word.toLowerCase()] = (wordCounts[word.toLowerCase()] || 0) + 1;
+  // Check for excessive repetition in words
+  const hasExcessiveRepetition = words.some(word => {
+    const charCounts = {};
+    for (let char of word.toLowerCase()) {
+      charCounts[char] = (charCounts[char] || 0) + 1;
+    }
+    const maxCount = Math.max(...Object.values(charCounts));
+    return maxCount > word.length * 0.6; // More than 60% same character
   });
   
-  const maxWordRepetition = Math.max(...Object.values(wordCounts));
-  if (maxWordRepetition > 1) return false; // No repeated words in names
+  if (hasExcessiveRepetition) return false;
+  
+  // Check for realistic name patterns (should have vowels)
+  const hasVowels = words.some(word => /[aeiou]/i.test(word));
+  if (!hasVowels) return false;
   
   return true;
 };
@@ -143,43 +131,78 @@ const isValidName = (name) => {
 const isValidMessage = (message) => {
   const trimmed = message.trim();
   
-  // Check for minimum meaningful content
+  // Check minimum length
   if (trimmed.length < 20) return false;
   
-  // Check for repeated characters (more than 3 consecutive same characters)
-  if (/(.)\1{3,}/.test(trimmed)) return false;
+  // Check maximum length
+  if (trimmed.length > 2000) return false;
   
-  // Check for keyboard patterns (common gibberish patterns)
+  // Enhanced meaningful content validation
+  const words = trimmed.split(/\s+/).filter(word => word.length > 0);
+  if (words.length < 3) return false;
+  
+  // Enhanced keyboard pattern detection
   const keyboardPatterns = [
-    /[qwertyuiop]{4,}/i,
-    /[asdfghjkl]{4,}/i,
-    /[zxcvbnm]{4,}/i,
-    /[qwerty]{4,}/i,
-    /[asdf]{4,}/i,
-    /[zxcv]{4,}/i,
-    /[1234567890]{4,}/,
-    /[abcdefghijklmnopqrstuvwxyz]{6,}/i,
-    /[qwertyuiopasdfghjklzxcvbnm]{8,}/i
+    /^[qwertyuiop\s]+$/i,
+    /^[asdfghjkl\s]+$/i,
+    /^[zxcvbnm\s]+$/i,
+    /^[abcdefghijklmnopqrstuvwxyz\s]+$/i,
+    /^(.)\1+$/i, // repeated characters
+    /^[lkjhgfdsa\s]+$/i, // reverse keyboard patterns
+    /^[poiuytrewq\s]+$/i,
+    /^[mnbvcxz\s]+$/i,
+    /^[gfdfghjkl';lkjhglokiju\s]+$/i // specific gibberish pattern
   ];
   
   if (keyboardPatterns.some(pattern => pattern.test(trimmed))) return false;
   
-  // Check for excessive special characters or symbols
-  const specialCharCount = (trimmed.match(/[^a-zA-Z0-9\s.,!?;:'"()-]/g) || []).length;
-  if (specialCharCount > trimmed.length * 0.3) return false;
+  // Check for proper sentence structure (should contain some punctuation or proper words)
+  const hasProperWords = words.some(word => word.length >= 3);
+  if (!hasProperWords) return false;
   
-  // Check for meaningful word patterns (at least 3 words with 2+ characters each)
-  const words = trimmed.split(/\s+/).filter(word => word.length >= 2);
-  if (words.length < 3) return false;
-  
-  // Check for excessive repetition of same word
+  // Enhanced repetition detection
   const wordCounts = {};
   words.forEach(word => {
     wordCounts[word.toLowerCase()] = (wordCounts[word.toLowerCase()] || 0) + 1;
   });
   
-  const maxWordRepetition = Math.max(...Object.values(wordCounts));
-  if (maxWordRepetition > Math.ceil(words.length / 2)) return false;
+  const maxRepeats = Math.max(...Object.values(wordCounts));
+  if (maxRepeats > words.length * 0.3) return false;
+  
+  // Check for character repetition within words
+  const hasExcessiveCharRepetition = words.some(word => {
+    if (word.length < 4) return false;
+    const charCounts = {};
+    for (let char of word.toLowerCase()) {
+      charCounts[char] = (charCounts[char] || 0) + 1;
+    }
+    const maxCount = Math.max(...Object.values(charCounts));
+    return maxCount > word.length * 0.5; // More than 50% same character
+  });
+  
+  if (hasExcessiveCharRepetition) return false;
+  
+  // Check for realistic sentence structure
+  const hasVowels = words.some(word => /[aeiou]/i.test(word));
+  if (!hasVowels) return false;
+  
+  // Check for minimum meaningful content
+  const meaningfulWords = words.filter(word => 
+    word.length >= 3 && 
+    /[aeiou]/i.test(word) && 
+    !/^(.)\1+$/.test(word)
+  );
+  
+  if (meaningfulWords.length < 2) return false;
+  
+  // Check for common spam patterns
+  const spamPatterns = [
+    /(.)\1{4,}/, // 5 or more consecutive same characters
+    /[^a-zA-Z0-9\s.,!?]{3,}/, // 3 or more consecutive special characters
+    /\b(.)\1{3,}\b/ // 4 or more consecutive same characters in a word
+  ];
+  
+  if (spamPatterns.some(pattern => pattern.test(trimmed))) return false;
   
   return true;
 };
@@ -195,6 +218,36 @@ const isValidPhoneNumber = (phone) => {
   
   // Must start with 6, 7, 8, or 9
   if (!/^[6789]/.test(cleaned)) return false;
+  
+  // Enhanced spam and fake number detection
+  // Check for repeated digits (spam prevention)
+  if (/^(\d)\1{9}$/.test(cleaned)) return false;
+  
+  // Check for sequential patterns
+  const isSequential = /^(0123456789|9876543210)$/.test(cleaned);
+  if (isSequential) return false;
+  
+  // Check for excessive repetition (more than 5 same digits)
+  const digitCounts = {};
+  for (let digit of cleaned) {
+    digitCounts[digit] = (digitCounts[digit] || 0) + 1;
+  }
+  const maxCount = Math.max(...Object.values(digitCounts));
+  if (maxCount > 5) return false;
+  
+  // Check for unrealistic patterns (like 9555555555, 8888888888)
+  const unrealisticPatterns = [
+    /^9{10}$/, // All 9s
+    /^8{10}$/, // All 8s
+    /^7{10}$/, // All 7s
+    /^6{10}$/, // All 6s
+    /^(\d)\1{4,}$/ // 5 or more consecutive same digits
+  ];
+  
+  if (unrealisticPatterns.some(pattern => pattern.test(cleaned))) return false;
+  
+  // Check for common fake patterns
+  if (cleaned === '1234567890' || cleaned === '9876543210') return false;
   
   return true;
 };
