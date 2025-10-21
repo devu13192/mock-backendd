@@ -9,6 +9,7 @@ const contactRoutes = require("./routes/contact.js")
 const mentorRoutes = require("./routes/mentor.js")
 const adRoutes = require("./routes/ad.js")
 const chatRoutes = require("./routes/chat.js")
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express()
 const cors = require("cors")
@@ -16,9 +17,6 @@ app.use(cors())
 require('dotenv/config');
 app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
-
-// Serve uploaded files
-app.use('/uploads', express.static('uploads'))
 app.use("/interview", interviewRoutes)
 app.use("/user", userRoutes)
 app.use("/userInterview", userInterviewRoutes)
@@ -26,6 +24,8 @@ app.use("/api/contacts", contactRoutes)
 app.use("/mentor", mentorRoutes)
 app.use("/ads", adRoutes)
 app.use("/chat", chatRoutes)
+
+const ai = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 // Health ping for frontend latency checks
 app.get('/ping', (req, res) => {
@@ -57,36 +57,14 @@ app.get('/download-test', (req, res) => {
 // Endpoint to proxy OpenAI chat completions used by the user app
 app.post('/completions', async (req, res) => {
     try {
-        const apiKey = process.env.OPENAI_API_KEY
-        if (!apiKey) {
-            return res.status(500).send('Missing OPENAI_API_KEY')
-        }
-
         const { message } = req.body || {}
         if (!message || typeof message !== 'string') {
             return res.status(400).send('Invalid request: missing message')
         }
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: message }],
-                max_tokens: 200,
-            })
-        })
-
-        if (!response.ok) {
-            const errorText = await response.text().catch(() => 'Upstream error')
-            return res.status(502).send(errorText)
-        }
-
-        const json = await response.json()
-        const content = json?.choices?.[0]?.message?.content || ''
+        const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" })
+        const response = await model.generateContent(message)
+        const content = response?.response?.text?.() || ""
         return res.send(content)
     } catch (err) {
         console.error('Error in /completions:', err)
@@ -94,7 +72,7 @@ app.post('/completions', async (req, res) => {
     }
 })
 
-app.get("/",(req,res)=>{
+app.get("/", (req, res) => {
     res.send("Hello World")
 })
 
@@ -106,7 +84,7 @@ app.get("/",(req,res)=>{
 var port = parseInt(process.env.PORT, 10) || 5000
 let io = null
 
-function startExpress(desiredPort, attempt = 0){
+function startExpress(desiredPort, attempt = 0) {
     const server = app.listen(desiredPort, () => {
         console.log('Server listening on port', desiredPort)
     })
@@ -114,7 +92,7 @@ function startExpress(desiredPort, attempt = 0){
     // Initialize Socket.IO on the same HTTP server
     const { Server } = require('socket.io')
     io = new Server(server, {
-        cors: { origin: '*', methods: ['GET','POST'] }
+        cors: { origin: '*', methods: ['GET', 'POST'] }
     })
     app.set('io', io)
 
@@ -149,7 +127,7 @@ function startExpress(desiredPort, attempt = 0){
         })
     })
     server.on('error', (err) => {
-        if (err && err.code === 'EADDRINUSE' && attempt < 5){
+        if (err && err.code === 'EADDRINUSE' && attempt < 5) {
             const nextPort = desiredPort + 1
             console.warn(`Port ${desiredPort} in use. Trying ${nextPort}...`)
             startExpress(nextPort, attempt + 1)
@@ -160,7 +138,6 @@ function startExpress(desiredPort, attempt = 0){
 }
 
 mongoose.connect("mongodb+srv://devupriya:devupriya@cluster0.bxhdiuc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-    { useNewUrlParser: true, useUnifiedTopology: true }).then(()=>{
+    { useNewUrlParser: true, useUnifiedTopology: true }).then(() => {
         startExpress(port)
     });
-

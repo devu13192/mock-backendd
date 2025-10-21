@@ -1,11 +1,11 @@
 
-const UserSchema = require("../models/userSchema.js")
-const mongoose = require("mongoose")
-const nodemailer = require('nodemailer')
-const cloudinary = require('cloudinary').v2
+const UserSchema = require("../models/userSchema.js");
+const mongoose = require("mongoose");
+const nodemailer = require('nodemailer');
+const cloudinary = require('cloudinary').v2;
 
 // Email configuration with fallback values
-console.log('📧 Email system initialized with fallback credentials')
+console.log('📧 Email system initialized with fallback credentials');
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -13,18 +13,19 @@ const transporter = nodemailer.createTransport({
         user: process.env.SMTP_USER || 'kudevupriya@gmail.com',
         pass: process.env.SMTP_PASS || 'skobhmavhafnstnz'
     }
-})
+});
+
 // Cloudinary configuration
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dbocasupv',
     api_key: process.env.CLOUDINARY_API_KEY || '829761961339449',
     api_secret: process.env.CLOUDINARY_API_SECRET || '8n-9K4Oi2osFx8RK4eh_q_RYYlQ'
-})
+});
 
-async function sendLoginEmail({ toEmail, isNew, userName = '' }){
-    if(!toEmail) {
-        console.log('No email provided for login notification')
-        return
+async function sendLoginEmail({ toEmail, isNew, userName = '' }) {
+    if (!toEmail) {
+        console.log('No email provided for login notification');
+        return;
     }
     
     const subject = isNew ? 'Welcome to EIRA Interview Platform' : 'Login Notification - EIRA'

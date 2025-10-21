@@ -6,7 +6,7 @@ const mongoose = require("mongoose")
 
 
 exports.getInterviews = async (req,res) =>{
-    
+    try{
     const data = await InterviewSchema.find();
     
     // Log existing types for debugging
@@ -57,6 +57,10 @@ exports.getInterviews = async (req,res) =>{
     // Fetch updated data
     const updatedData = await InterviewSchema.find();
     res.send(updatedData)
+    }catch(err){
+        console.error('getInterviews error:', err)
+        res.status(500).json({ message: 'Failed to fetch interviews' })
+    }
 }
 // Server-side validation functions
 const isValidCompany = (company) => {
@@ -108,7 +112,8 @@ const isValidRole = (role) => {
   if (keyboardPatterns.some(pattern => lower.includes(pattern))) return false;
   
   // Role names should contain letters, numbers, spaces, and basic punctuation
-  if (!/^[a-zA-Z0-9\s&.,'-/]+$/.test(trimmed)) return false;
+  // Place '-' at end of class to avoid range interpretation
+  if (!/^[a-zA-Z0-9\s&.,'\/-]+$/.test(trimmed)) return false;
   
   // Must have at least one meaningful word
   const words = trimmed.split(/\s+/).filter(word => word.length >= 2);
@@ -284,23 +289,27 @@ exports.addInterview = async(req,res) =>{
 }
 
 exports.getInterviewById= async (req,res) =>{
+    try{
     const id = req.params.id
     const data = await InterviewSchema.findById(id);
+    if(!data) return res.status(404).json({ message: 'Interview not found' })
     res.send(data)
+    }catch(err){
+        console.error('getInterviewById error:', err)
+        res.status(500).json({ message: 'Failed to fetch interview' })
+    }
 }
 
 exports.updateCount= async (req,res) =>{
+    try{
     const id = req.params.id
     const data = await InterviewSchema.findByIdAndUpdate(id, { $inc: { count: 1 } }, { new: true })
-    .then((updatedInterview) => {
-      // Handle the updated interview
-      console.log(updatedInterview);
-    })
-    .catch((error) => {
-      // Handle the error
-      console.error(error);
-    });
+    if(!data) return res.status(404).json({ message: 'Interview not found' })
     res.send(data)
+    }catch(error){
+      console.error('updateCount error:', error)
+      res.status(500).json({ message: 'Failed to update count' })
+    }
 }
 
 exports.updateInterview = async (req, res) => {
